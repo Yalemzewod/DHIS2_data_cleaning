@@ -1,0 +1,704 @@
+---
+title: "Data cleaning in R"
+toc: true
+toc-depth: 2
+number-sections: false
+highlight-style: github
+format:
+  html:
+    self-contained: true
+    code-fold: true
+    code-summary: "Show the code"
+    code-tools: true
+    theme: united 
+knitr: 
+ opts_knit: 
+   warning: false
+   message: false
+editor: visual
+---
+
+#### Data and system challenges
+
+Due to heterogeneity in nature of data journey, sources, methods of collection, and volume, public health data encounter a number of constraints which may influence its utilization.
+
+These are sometime referred to as Data quality dimensions and may include but not limited to the following attributes:
+
+-   **Completeness** - captured but not reported;
+
+-   **Timeliness** - late reporting;
+
+-   **Availability** - captured, reported but not accessible for use;
+
+-   **Incomplete/poor recording** - some important variables or attributes not captured;
+
+-   **Consistency** - Always tells the similar fact/story;
+
+-   **Aggregated** - masked important information relevant for decision; and
+
+-   **Big data** - an *ambiguous* dimension.
+
+-   **Name mismatching** - miss spelled facility or area name
+
+Arguments that it is better to have *minimal useful data* in real time and best utilized than *lots of data* at a low speed and poorly utilized. Your choice! As the data grows bigger, more advanced skills and tools are required to manage it.
+
+## Reading and exploring data
+
+This section will focus on how to read data in R. R has the functionality to import various types of data. One of the most common file types we work with are `.csv` files, but we can also import `.dta` files and `.xlsx` files among others.
+
+We can import .csv files into RStudio using the base function `read.csv()`. In this function we insert the file path to the data we wish to import. Note that as we have set up a project, this is our base directory so file paths stem from where the project is saved. We can assign the imported dataset to an object, here called "routine_data", using the `<-` operator to store it in our environment.
+
+For this training we are using a dataset called "routine_data". This is a dataset of malaria routine case extracted from *DHIS2* and contains variables for the numbers of malaria tests performed and the numbers of confirmed cases stratified by age and sex. Data are reported by districts for children under the age of 5 , 5 - 14 and over the age of 5 separately.
+
+For data management, we will use the ***tidyverse*** *package using install.packages()* function.
+
+```{r echo=FALSE}
+install.packages("tidyverse", repos = "http://cran.us.r-project.org") 
+
+```
+
+```{r echo=FALSE}
+library(tidyverse) #data management 
+library(janitor)#clean names
+library(hablar) #convert data type
+library(haven) #to read and save '.dta' files
+library(lubridate)# For date
+```
+
+```{r eval=FALSE, set_working_directory}
+
+# remove(list=ls()) # clear your directory 
+
+my.dir <- paste(getwd(),"/",sep="")
+
+routine_data <-read.csv("C:/Users/user/Documents/Data_management_in_R/Data/Number of slides or RDT positive for malaria disagregated by age & sex_ woredas.csv") |> 
+    clean_names() 
+```
+
+Other data types can easily be read into R using different packages available. `.xlsx` files can easily read into R using the `read_excel()` function from the **readxl** package. Stata files (.dta) can be read in using the `read_dta()` function from the `Haven` package or `read.dta()` function from the `foreign` package. Both `Haven and readxl` are parts of the tidyverse package however we need to install the `foreign` package separately.
+
+```{r eval=FALSE}
+# Examples, not run
+library(readxl) 
+xlsx_data <- read_xls("data",sheet = "sheet1", col_names = TRUE, na = "NA")
+
+library(haven)
+stata_data <- read_dta("stata_file.dta")
+```
+
+Whilst `read.csv()` is the most common way to read data into R, there is the alternative `read_csv()` function (note the underscore). This is part of the `tidyverse` group of packages and is often a better option for reading in CSV files. This function is quicker, it reads the data in as a tibble instead of a data frame and allows for non standard variable namesm amongst other benefits.
+
+```{r}
+routine_data <- read_csv("C:/Users/user/Documents/Data_management_in_R/Data/Number of slides or RDT positive for malaria disagregated by age & sex_ woredas.csv") |> 
+   clean_names()
+ 
+```
+
+There are various options we can use when importing data, such as whether to include headers, what character to use for decimal points, what to import as missing values. To explore these options you can look at the help pages e.g. `?read_csv`.
+
+### Explore the data
+
+You can see what the data looks like either by clicking on it in the global environment window or by typing the command `View(routine_data)` which opens up a window displaying the data. Alternatively, we may just want to look at a few rows. We can do this by using the `head()` function, which shows us the first n rows of data.
+
+```{r view_top_five_rows_of_the_dataframe}
+head(routine_data, 5)
+```
+
+To understand the structure of the data we can use the `str()` command.
+
+```{r}
+str(routine_data)
+```
+
+```{r}
+glimpse(routine_data)
+```
+
+check the class of the dataset. The class of the datasets could be `tbl` or `data.frame`.
+
+```{r}
+class(routine_data)
+```
+
+For a data frame we can select the nth row, or the nth column using square brackets (note where the comma is paced).
+
+```{r view_the second_col}
+head(routine_data[,2], 5) #second column
+```
+
+```{r first_row}
+routine_data[1,] #first row
+```
+
+Checking the column name is good to identify if we missed variable from database extraction or misspelled variables. The variable name need to be clean, short and readable,
+
+```{r}
+colnames(routine_data)
+
+names(routine_data)
+
+variable.names(routine_data)
+```
+
+::: {.callout-important appearance="simple"}
+Task 1: - Import the `routine_data.csv` file using the `read_csv()` function, setting -9999 values to NA, call the object "routine_data" - Explore the data using functions such as `str()`, `head()` and `colname ()`
+:::
+
+## Basic data cleaning in Tidyverse
+
+In this section we introduce you to the `tidyverse` packages and show how these functions can be used to explore, manipulate and analyse data.
+
+Tidyverse is a collection of R packages for data science, designed to make cleaning and analyses of data easy and tidy. It uses a range of packages and functions, along with the pipe operator, `%>% or |>`, to produce easily readable and reproducible code.
+
+We will start by looking at the basic data cleaning. We have already loaded this package with the command `library(tidyverse).`
+
+### Clean column names
+
+We can see here that the column names are too long and contains irrelevant texts. Each column also contains months and year. We need to trim off unnecessary strings and define months and year as a column.
+
+Firstly, let's remove `number_of_slides_or_rdt_positive_for_` from each column. To remove string `number_of_slides_or_rdt_positive_for_`, we need to check the column is a character string using `class()` function. We will use the `gsub()` function in `grep` R base package for pattern matching and replacement. This function uses basic syntax: **gsub(pattern, replacement, x)** where: pattern: The pattern to look for in our case `number_of_slides_or_rdt_positive_for_`; replacement: The replacement for the pattern `" "`; x: The string to search which is the strings next to the pattern.
+
+```{r}
+colnames(routine_data) <- gsub("number_of_slides_or_rdt_positive_for_", "", colnames(routine_data))
+```
+
+Now the `number_of_slides_or_rdt_positive_for_` has removed.
+
+```{r}
+colnames(routine_data)
+```
+
+District names are named as `organisationunitname`. The row names under the column `organisationunitname` are not consistent. For example rows in Addis Abeba has a suffix `Subcity` whereas in other regions `WorHo`. The number of characters for `Subcity and WOrHo` is not similar. To replace `Subcity by WOrHo` from the district name, we will use `str_replace()` function. To replace `Subcity` with `WorHo` we could write:
+
+```{r}
+##replaces the string 
+routine_data$organisationunitname <- str_replace(routine_data$organisationunitname, "SubCity", "WorHO")
+
+```
+
+To remove `WOrHo` in`organisationunitname,` we will use `str_sub()` function followed by the number of characters `nchar` to be removed from the *stringr* package under the `tidyverse` package sets.
+
+```{r}
+routine_data$organisationunitname <- str_sub(routine_data$organisationunitname, 1, nchar(routine_data$organisationunitname)-5)
+
+```
+
+**Clean zones**
+
+```{r}
+#replace the string "Sub City" with "ZHD"
+routine_data$zone <- str_replace(routine_data$zone, "Sub City", "ZHD") 
+
+#replace the string "WorHO" with "ZHD"
+routine_data$zone <- str_replace(routine_data$zone, "WorHO", "ZHD") 
+
+# remove "Town/town"
+routine_data$zone <- gsub("Town","", as.character(routine_data$zone)) 
+
+routine_data$zone <- gsub("town","", as.character(routine_data$zone)) 
+
+routine_data$zone <- str_sub(routine_data$zone , 1, nchar(routine_data$zone)-3)
+```
+
+**Clean Region column**
+
+```{r}
+# remove 'Regional Health Bureau'
+routine_data$region <- str_sub(routine_data$region , 1, nchar(routine_data$region)-23)
+```
+
+Now we have a clean region, zone, organisationunitname along with the confirmed cases stratified by sex and age. For easy communication let's rename *organisationunitname* into "district" using the `rename()` function in tidyverse package.
+
+```{r}
+routine_data <- rename(routine_data,
+                           "district" = "organisationunitname")
+```
+
+After the suffix 'WorHo', 'ZHD' and 'Regional Health Bureau' removed from the district, zone and region column, respectively there will be a white spaces and that need to removed.
+
+```{r view_white_spaces}
+data.frame(levels(as.factor(routine_data$district)))[1:5,]
+```
+
+Let's remove the white space for all three columns
+
+```{r Trim_white_spaces}
+
+routine_data$district <- trimws(routine_data$district, which = c("both"))
+routine_data$region <- trimws(routine_data$region, which = c("both"))
+routine_data$zone <- trimws(routine_data$zone, which = c("both"))
+
+data.frame(levels(as.factor(routine_data$district)))[1:5,]
+```
+
+The data contains total number of confirmed malaria cases stratified by sex and age groups. As we can see from the above `colnames()` function, each column name contains age and sex. For this reasons, we need to subset the data by age group.
+
+```{r under_five age group}
+u5 <- select(routine_data, region:district, starts_with("malaria_5_years_"))
+```
+
+Let's subset other age groups i.e., 5-14 years and 15 and above age groups following the above steps.
+
+```{r age5-14_years}
+  select(routine_data,
+         region:district,contains("_5_14_years")) ->age5_14
+```
+
+```{r age_15_and_over}
+select(routine_data, region:district,malaria_male_15_years_hamle_2013:malaria_female_15_years_sene_2014) ->age_ov15
+```
+
+#### Organize the data
+
+Reshaping or pivoting data is an important part of data cleaning and manipulation. Tidyverse has introduced the functions `pivot_wider()` and `pivot_longer()` to improve the ease of reshaping data in R. For details please read [Advanced manipulation of data frames section](https://malaria-atlas-project.gitlab.io/intro-to-spatial-analysis-for-infectious-diseases/02_datahandling.html#Advanced_manipulation_of_data_frames "Reshshaping data") in the MAP training module.
+
+```{r to_long_format}
+under_five <- u5 %>%
+  pivot_longer(cols = malaria_5_years_male_hamle_2013:malaria_5_years_female_sene_2014,
+          names_to = c("Age","Sex", "Month","Year"),
+                         names_pattern = "malaria_(.*)_years_(.*)_(.*)_(.*)",
+                         values_to = "conf") 
+head(under_five)
+```
+
+```{r}
+
+age5_14long <- age5_14 %>%
+  pivot_longer(cols = malaria_male_5_14_years_hamle_2013:malaria_female_5_14_years_sene_2014,
+          names_to = c("Sex","l_age", "u_age", "Month","Year"),
+                         names_pattern = "malaria_(.*)_(.*)_(.*)_years_(.*)_(.*)",
+                         values_to = "conf") |> 
+  ## create a new column called 'Age' by combining the l_age and u_age. The 'mutate()' function will be covered below in the data manupulation section.  
+
+          mutate(Age = paste(l_age, "-", u_age)) |>  
+          select(-l_age,-u_age)
+
+head(age5_14long)
+```
+
+```{r ov15}
+age_ov15long <- age_ov15 |> 
+  pivot_longer(cols = malaria_male_15_years_hamle_2013:malaria_female_15_years_sene_2014,
+          names_to = c("Sex","Age", "Month","Year"),
+                         names_pattern = "malaria_(.*)_(.*)_years_(.*)_(.*)",
+                         values_to = "conf")
+head(age_ov15long)
+```
+
+NOTE: When using tidyverse there are a range of helper functions to help you concisely refer to multiple variables based on their name. This makes it easier to select numerous variables and includes helper functions such as starts_with() and ends_with(). To explore these further look at ?select
+
+The three data frames have an equal length and column names. To merge three data frames (datasets) horizontally, we can use the `merge()` function in the R language. To bind or combine rows in R, use the `rbind()` function. The `rbind()` stands for row binding. The `bind_rows()` is a function in *tidyverse* package that combines more than two [vectors](https://r-lang.com/r-vector-to-dataframe/), [matrices](https://r-lang.com/what-is-r-matrix-create-access-edit-and-delete-matrix-in-r/), and/or [data frames](https://r-lang.com/r-data-frame/) by rows. The data frames **must** have the same variables, but they do not have to be in the same order. Before binding the three dataframes, let's check the length and orders
+
+```{r check_colnames_order_and_length}
+
+#under 5
+dim(under_five)
+colnames(under_five)
+
+#5-14
+dim(age5_14long)
+colnames(age5_14long)
+
+#Over 15
+dim(age_ov15long)
+colnames(age_ov15long)
+
+```
+
+The three database has similar lengths but different column names order.
+
+```{r bind_in_rows}
+routine_data_new <- bind_rows(under_five, age5_14long,age_ov15long)
+```
+
+The newly created datasets contains locations (region, zone, district), age, sex, Year, Month and confirmed cases.
+
+`summary()`and `summarise` will provide a summary of the numerical variable, whilst `table()` will tabulate categorical variables.
+
+```{r summary}
+summary(routine_data_new) #the whole dataset
+
+summary(routine_data_new$conf)
+
+table(routine_data$region) #one col
+
+```
+
+### Clean NA's
+
+There are 29675 rows with NA value. We can exclude or replace 'NA'. All NA's return as FALSE
+
+```{r echo=FALSE}
+sum(is.na(routine_data_new)) #data frame
+       
+summary(!is.na(routine_data_new)) #each column
+
+#apply(is.na(routine_data_new),2,which)# positions of missing value in each colum
+
+#which(is.na(routine_data_new))#Identify locations of NA's
+```
+
+```{r replace_na, echo=FALSE}
+routine_data_new$conf_nona[is.na(routine_data_new$conf)] == -9999 
+
+mutate(routine_data_new,conf_nona = ifelse(is.na(conf), -9999, conf))
+```
+
+Create a column of confirmed cases for each sex and age group.
+
+```{r summarise}
+routine_data_new <-  routine_data_new |> 
+group_by(region,zone,district,Month, Year) |>  
+pivot_wider(names_from = c("Sex","Age"),# reshape from long to wide format
+              names_sep = "_",
+              values_from = c("conf")) |> 
+  rowwise() |> #sum in rows
+  #create a new column of confirmed cases for each sex and age group
+  summarise(female = sum(female_5,`female_5 - 14`,female_15, na.rm = TRUE),
+            male = sum(male_5,`male_5 - 14`,male_15, na.rm = TRUE),
+            conf_5 = sum(female_5,male_5, na.rm = TRUE),
+            conf_514 = sum(`female_5 - 14`,`male_5 - 14`, na.rm = TRUE),
+            conf_15 = sum(female_15,male_15, na.rm = TRUE),
+            cases = sum(conf_5,conf_514,conf_15))
+
+```
+
+::: callout-important
+In the \`summarise()\` function, rows with \`NA\` values are assigned as zero. Please see the \`na.rm = TRUE\` function.
+:::
+
+The name and order of *`Month`* and `Year` variable are in Ethiopian calender. In Ethiopia the the first month of the year is `July`. For communication purpose (scientific publication), let's change the year and month variable into Gregorian calender format.
+
+We can add new variables to the dataset or change existing variables using `mutate()`. Mutate allows us to assign new variables using the `=` sign. For example, here to change existing `Month` variable we could write:
+
+```{r}
+#Change the Month variable in the existing dataset
+routine_data_new <- routine_data_new |> 
+                      mutate(Month = ifelse(Month == "hamle", "July",
+                                     ifelse(Month == "nehase", "August",
+                                     ifelse(Month == "meskerem", "September",
+                                     ifelse(Month == "tikemet", "October",
+                                     ifelse(Month == "hidar", "November",
+                                     ifelse(Month == "tahesas","December",
+                                     ifelse(Month == "tir", "January",
+                                     ifelse(Month == "yekatit", "February",
+                                     ifelse(Month == "megabit", "March",
+                                     ifelse(Month == "miazia", "April",
+                                     ifelse(Month == "ginbot", "May",
+                                     ifelse(Month == "sene", "June", NA)))))))))))))
+
+levels(as.factor(routine_data_new$Month))
+```
+
+July is the first month of reporting physical year i.e., `Year 2013/July` is 2021.
+
+```{r}
+routine_data_new$Year[which((routine_data_new$Year=="2013") & (routine_data_new$Month =="July"))] <- "2013/14"
+routine_data_new$Year[which((routine_data_new$Year=="2013") & (routine_data_new$Month =="August"))] <- "2013/14"
+
+routine_data_new$Year[which(routine_data_new$Year=="2014")] <- "2022"
+routine_data_new$Year[which(routine_data_new$Year=="2013/14")] <- "2022"
+```
+
+In our routine_data dataset we have a variable of month and year, from these we want to create one variable for date. We can do this using the `make_date()` function from `lubridate` package. This function expects inputs for the day, month and year. If the day or month is missing then this defaults to 1, and if the year is missing it defaults to 1970. We can use this function to create a date variable in our routine dataset, combining it with mutate.
+
+```{r}
+routine_data_new <- mutate(routine_data_new,
+                       Date = make_date(year = as.numeric(Year), month =as.factor(Month)))
+```
+
+In Ethiopia, district boundaries are changed over time, reflecting new boundary designations for administration purposes across the study years.
+
+District boundaries are changed over time, reflecting new boundary designations for administration purposes across the study years. For analysis purpose, we need to merege districts that underwent a boundary with their corresponding district before the change to create a stable unit. Collapse a set of districts into a single district, within a region and pass in a dataframe representing a region, a set of district names to target, and a name to use for replacing the given set of district names.
+
+Data from the first 7 columns are kept static \-- only the first row is selected for each unique year-month combination. This loses the proper meaning of the given zone, unless the incoming name `(name_replace)` lies within the target zone. Consider replacing the zone name as well, if needed.
+
+The remaining columns are summed (per column, not row) to reduce the data into the summary / combined row.
+
+```{r echo=FALSE}
+routine_data_new <-routine_data_new |> 
+  select(region,zone,district,Month,Year,Date,                           female,male,conf_5,conf_514,conf_15,cases)
+#' @param df_region Dataframe on which to operate, representing a single region
+#' @param district_names Set of district names to target and collapse
+#' @param name_replace Name to use for replacing the target district names
+#' @param cols_static
+#' @param cols_sum
+#' @return Region dataframe with collapsed district rows
+collapse_district <- function(
+    df_region,
+    district_names,
+    name_replace,
+    cols_static,
+    cols_sum
+  ) {
+
+  # Subset the dataframe to target districts
+  target_rows <- unname(unlist(Map(
+    function(x) any(x == district_names),
+    df_region$district
+  )))
+
+  df_district <- df_region[target_rows, ]
+
+  # Get data split by year-month
+  df_dist_ym <- Map(
+    function(x) split(x, x$Month),        # Inner split -- month
+    split(df_district, df_district$Year)  # Outer split -- year
+  )
+
+  # Collapse the data into new rows
+  # - Outer iterates by year
+  # - Inner iterates by month
+  df_collapsed <- Map(
+    function(x) Map(
+      function(y) collapse_rows(
+        y,
+        name_replace = name_replace,
+        cols_static  = cols_static,
+        cols_sum     = cols_sum
+      ),
+      x
+    ),
+    df_dist_ym
+  )
+
+  # Bind together by row -- bind both inner and outer components
+  do.call(rbind, do.call(rbind, df_collapsed))
+
+}
+
+
+#' Collapse the rows of a dataset into a single row, replacing district name
+#'
+#' The input dataframe `df` is intended to be one dataframe of one year-month
+#' combination.  The dataframe of year-month combination should itself be
+#' dataframe representing a single region.
+#'
+#' Only the first row is selected to be returned -- this should be checked!  It
+#' is assumed that the zone does not matter.  All other data should be the same
+#' (columns 1 to 5, except 2; zone is column 2).  Numeric data (columns 6 to
+#' end; hardcoded) are summed.
+#'
+#' @param df Dataframe on which to operate
+#' @param name_replace New district name, with which to replace existing
+#' district name
+#' @param cols_static
+#' @param cols_sum
+#' @return Collapsed dataframe with a copy of the first row, and with the
+#' district name replaced
+collapse_rows <- function(df, name_replace, cols_static, cols_sum) {
+
+  # Get first row only -- remainder should be identical or can be dropped
+  df_static <- df[1, cols_static]
+
+  # Replace the district name
+  df_static$district <- name_replace
+
+  # Sum over the columns of the target columns to sum
+  # TODO: Look into `Map` version of this
+  df_summed <- apply(df[, cols_sum], MARGIN = 2, FUN = sum)
+
+  # Bind the static data to the summed data by column
+  # NOTE: The `as.data.frame(t(...))` call is because of the odd output format
+  # of the `apply` call just above
+  cbind(df_static, as.data.frame(t(df_summed)))
+
+}
+
+
+#' Batch-collapse row data within a region dataframe
+#'
+#' Input data are expected to be of the form:
+#' ```
+#' list(
+#'   name_replace_1 = district_names_2,
+#'   name_replace_2 = district_names_2,
+#'   ...
+#' )
+#' ```
+#'
+#' @param df Dataframe in which to collapse rows
+#' @param spec Specification data for which to collapse rows
+#' @param cols_static
+#' @param cols_sum
+#' @return Dataframe with all specified row-collapse operations applied
+#' @examples
+#' df_reduced <- reduce_dataframe(
+#'   df,
+#'   spec = list(
+#'     "Addis Ketema (DD)" = c("Goro", "Addis Ketema Operational")
+#'   ),
+#'   cols_static = seq(1, 5),
+#'   cols_sum    = seq(6, ncol(df))
+#' )
+reduce_df_region <- function(df, spec, cols_static, cols_sum) {
+
+  # Get a vector of districts to remove
+  district_rm <- local({
+
+    # Get all unique districts to remove from the overall dataframe
+    district <- unique(do.call(c, spec))
+
+    # Convert to a Boolean vector by comparing to the target districts
+    unname(unlist(Map(function(x) !any(x == district), df$district)))
+
+  })
+
+  # Run `collapse_district` for all spec pairs, and immediately row-bind
+  df_collapse <- local({
+
+    # Run `collapse_district` for all spec pairs
+    result <- Map(
+      function(x) collapse_district(df, spec[[x]], x, cols_static, cols_sum),
+      names(spec)
+    )
+
+    # Row-bind the collapsed blocks
+    do.call(rbind, result)
+
+  })
+
+  # Remove the target rows from the input dataframe
+  df_reduced <- df[district_rm, ]
+
+  # Row-bind the reduced df and the row-bound, collapsed blocks
+  output <- rbind(df_reduced, df_collapse)
+  row.names(output) <- NULL
+
+  output
+
+}
+
+
+#' Reduce a dataframe by collapsing districts within regions
+#'
+#' TODO: Document differing specification for this one
+#'
+#' @param df
+#' @param spec
+#' @param cols_static
+#' @param cols_sum
+#' @return
+reduce_df <- function(df, spec, cols_static, cols_sum) {
+
+  # Copy the input dataset to reduce to unmodified regions (for binding)
+  df_out <- df[]
+
+  df_out_idx <- unname(unlist(Map(
+    function(x) !any(x == names(spec)),
+    df_out$region
+  )))
+
+  df_out <- df_out[df_out_idx, ]
+
+  # Split across all regions
+  df_region <- split(df, df$region)
+
+  # Get the target regions only
+  df_target <- Reduce(
+    function(a, x) {
+      e <- getElement(df_region, x)
+      if (is.null(e)) {
+        # Warn if element not found
+        cat(sprintf("\33[1;33mUnable to find target region:\33[m %s\n", x))
+      } else {
+        # Add target region data to accumulator by name
+        a[[x]] <- e
+      }
+      a
+    },
+    names(spec),
+    list()
+  )
+
+  # Compute the result
+  result <- local({
+    mid <- Map(
+      function(x) reduce_df_region(
+        df_target[[x]],
+        spec[[x]],
+        cols_static,
+        cols_sum
+      ),
+      names(df_target)
+    )
+    do.call(rbind, mid)
+  })
+
+  output <- rbind(df_out, result)
+  row.names(output) <- NULL
+
+  output
+
+}
+
+ spec <- list(
+      "Beneshangul Gumuz" = list(
+      "Kamashi" = c("Kamash town",
+                    "Kamashi"),
+      "Mandura" = c("Mandura", "Gilgel Beles Town")
+      ),
+      "Oromiya" = list(
+      "Kercha" = c("Kercha",
+                    "Kercha Town"),
+      "Holota Town" = c("Holota Town","Holota"),
+      "Dawe kachen" = c("Dawe Serer",
+                    "Dawe kachen"),
+       "Ziway Dugda" = c("Batu Town",
+                    "Ziway Dugda")
+    ),
+    "Sidama" = list(
+     "Aleta Chuko" = c("Aleta Chuko Town",
+                    "Aleta Chuko")
+    ),
+    "Amhara" = list(
+           "Tach Armacho" = c("Tach Armacho",
+                    "Central Armacho")
+    ),
+    "Tigray" = list(
+      "Mekelle" = c(
+        "Adi Haki", "Ayder",
+        "Hadnet","Hawelti",
+        "Qedamay Woyane",
+        "Quiha","Semen")
+      ),
+      "Dire Dawa" = list(
+      "Legehare Operational" = c("Dire Dawa Operational",
+                      "Legehare Operational"),
+      "Addis Ketema Operational" = c("Goro Operational", "Addis Ketema Operational")
+                              
+      ),
+        "SNNP" = list(
+        "Gerese Zuria" = c("Gerese Zuria","Gerese Town Administration"),
+        "Geze Gofa" = c("Bulki Town Administration","Geze Gofa"),
+        "Melekoza"= c("Melekoza", "Laha Town Administration"),
+         "Uba Debretsehay"= c("Uba Debretsehay","Beto Town Administration") 
+      )
+    )
+    
+   
+  cols_static <- seq(1, 6)
+  cols_sum    <- seq(7, ncol(routine_data_new))
+
+routine_new <- reduce_df(routine_data_new, spec, cols_static, cols_sum)
+  
+  ## Agalo Meti (renamed to Dambi), Dembi; Belo Jeganfoy (renamed to Mizyga); and Yaso (renamed to Zayi) 
+  ## are duplicated in the data set and need to be removed
+  ## Also Tula are under Hawasa city admisntration. Assuming the case data may report under the city administration,
+  ## To avoid duplicate Tula also removed removed 
+ 
+ routine_new_data <- routine_new |> 
+  filter(!district%in%c("Ondulu",
+                           "Tula","Asela Town",
+                           "Arda Jila Me'e Boko",
+                            "Karsasula"))
+
+```
+
+Let's save the clean data in a `.csv` format with the R built fucntion `write.csv()` followed by the file name.
+
+```{r}
+write.csv(routine_new_data, file = "task_data.csv", row.names = F)
+```
+
+## 
